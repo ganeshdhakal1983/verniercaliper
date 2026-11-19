@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Gear Assembly Animation</title>
+<style>
+  body{font-family:sans-serif;text-align:center;background:#f4f6f8}
+  canvas{background:#fff;border:1px solid #ccc;margin-top:8px}
+  button{padding:8px 14px;margin:4px;font-size:15px;cursor:pointer}
+  #info{max-width:640px;margin:6px auto;text-align:left}
+</style>
+</head>
+<body>
+<h2>Gear Assembly Animation</h2>
+<div>
+  <button id="bSpur">Spur Gears</button>
+  <button id="bRack">Rack and Pinion</button>
+  <button id="bPlanet">Planetary</button>
+  <button id="bReplay">Replay Assembly</button>
+</div>
+<canvas id="c" width="640" height="400"></canvas>
+<div id="info"></div>
+
+<script>
+window.addEventListener('load', function () {
+  var cv = document.getElementById('c');
+  var ctx = cv.getContext('2d');
+  var info = document.getElementById('info');
+  var notes = {
+    spur: "<b>Spur gears:</b> parallel shafts. Transmit motion and torque at a fixed ratio (here 2:1, direction reverses). Pros: simple, efficient (about 98%). Cons: noisy at speed. Load: low to high, limited by tooth bending.",
+    rack: "<b>Rack and pinion:</b> converts rotation to linear motion. Pros: precise positioning. Cons: limited stroke, backlash. Load: moderate, set by tooth width and rack support.",
+    planet: "<b>Planetary set:</b> sun, 3 planets, ring and carrier on one axis. Pros: compact, high torque density, load shared by planets. Cons: complex assembly, heat. Load: very high."
+  };
+  var scene = 'spur';
+  var start = performance.now();
+
+  function setScene(s) {
+    scene = s;
+    start = performance.now();
+    info.innerHTML = notes[s];
+  }
+
+  document.getElementById('bSpur').addEventListener('click', function () { setScene('spur'); });
+  document.getElementById('bRack').addEventListener('click', function () { setScene('rack'); });
+  document.getElementById('bPlanet').addEventListener('click', function () { setScene('planet'); });
+  document.getElementById('bReplay').addEventListener('click', function () { setScene(scene); });
+
+  function gear(x, y, r, n, ang, color, internal) {
+    var tooth = r * 0.18;
+    var step = Math.PI * 2 / n;
+    var fr = [0, 0.2, 0.5, 0.7];
+    ctx.beginPath();
+    for (var i = 0; i < n; i++) {
+      var a = ang + i * step;
+      var ro = internal ? r - tooth : r + tooth;
+      var rads = [r, ro, ro, r];
+      for (var k = 0; k < 4; k++) {
+        var aa = a + fr[k] * step;
+        var px = x + Math.cos(aa) * rads[k];
+        var py = y + Math.sin(aa) * rads[k];
+        if (i === 0 && k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+    }
+    ctx.closePath();
+    if (internal) {
+      ctx.moveTo(x + r + 22, y);
+      ctx.arc(x, y, r + 22, 0, Math.PI * 2, true);
+      ctx.fillStyle = color;
+      ctx.fill('evenodd');
+    } else {
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.2, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+    }
+  }
+
+  function label(t, x, y) {
+    ctx.fillStyle = '#222';
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(t, x, y);
+  }
+
+  function ease(t) { return 1 - Math.pow(1 - t, 3); }
+
+  function draw(now) {
+    ctx.clearRect(0, 0, 640, 400);
+    var el = (now - start) / 1000;
+    var p = ease(Math.max(0, Math.min(el / 2.5, 1)));
+    var spin = Math.max(0, el - 2.5) * 1.2;
+    label(p < 1 ? 'Assembling...' : 'Meshed and running', 320, 30);
+
+    if (scene === 'spur') {
+      var rA = 90, rB = 45, cy = 210;
+      gear(250, cy, rA, 20, spin, '#6fa8dc', false);
+      gear(250 + rA + rB + (1 - p) * 300, cy, rB, 10, -spin * 2 + Math.PI / 10 + Math.PI, '#f6b26b', false);
+      label('Driver (20T)', 250, 340);
+      label('Driven (10T)', 385, 340);
+    } else if (scene === 'rack') {
+      var r = 60, cx = 320, cy2 = 150;
+      var pitch = 2 * Math.PI * r / 16;
+      gear(cx, cy2 - (1 - p) * 150, r, 16, spin, '#6fa8dc', false);
+      var off = (spin * r) % pitch;
+      var ry = cy2 + r + 12 + (1 - p) * 150;
+      ctx.fillStyle = '#f6b26b';
+      ctx.fillRect(60, ry, 520, 30);
+      for (var x = 60 + off; x < 570; x += pitch) {
+        ctx.fillRect(x, ry - 10, pitch * 0.45, 10);
+      }
+      label('Pinion', cx, 60);
+      label('Rack moves linearly', 320, 390);
+    } else {
+      var px0 = 320, py0 = 210, rs = 36, rp = 36, orbit = 72, rr = 108;
+      gear(px0, py0, rr + 10 + (1 - p) * 250, 36, 0, '#d9d9d9', true);
+      var car = spin / 4;
+      gear(px0, py0, rs, 12, spin, '#e06666', false);
+      for (var i = 0; i < 3; i++) {
+        var a = car + i * Math.PI * 2 / 3;
+        var d = orbit + (1 - p) * 200;
+        gear(px0 + Math.cos(a) * d, py0 + Math.sin(a) * d, rp, 12, -(spin - car) + car + Math.PI / 12, '#93c47d', false);
+      }
+      label('Sun (red), Planets (green), Ring (grey)', 320, 390);
+    }
+    requestAnimationFrame(draw);
+  }
+
+  setScene('spur');
+  requestAnimationFrame(draw);
+});
+</script>
+</body>
+</html>

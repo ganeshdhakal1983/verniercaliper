@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Gear Assembly Animation</title>
+<style>
+  body{font-family:sans-serif;text-align:center;background:#f4f6f8}
+  canvas{background:#fff;border:1px solid #ccc;margin-top:8px}
+  button{padding:8px 14px;margin:4px;font-size:15px;cursor:pointer}
+  #info{max-width:640px;margin:6px auto;text-align:left}
+</style>
+</head>
+<body>
+<h2>Gear Assembly Animation</h2>
+<div>
+  <button onclick="setScene('spur')">Spur Gears</button>
+  <button onclick="setScene('rack')">Rack &amp; Pinion</button>
+  <button onclick="setScene('planet')">Planetary</button>
+  <button onclick="setScene(scene)">Replay Assembly</button>
+</div>
+<canvas id="c" width="640" height="400"></canvas>
+<div id="info"></div>
+<script>
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const info = document.getElementById('info');
+const notes = {
+  spur: "<b>Spur gears:</b> parallel shafts. Function: transmit motion/torque with a fixed ratio (here 2:1, direction reverses). Pros: simple, efficient (~98%). Cons: noisy at speed. Load: low to high, limited by tooth bending.",
+  rack: "<b>Rack and pinion:</b> converts rotation to linear motion. Pros: precise positioning. Cons: limited stroke, backlash. Load: moderate; set by tooth width and rack support.",
+  planet: "<b>Planetary set:</b> sun, 3 planets, ring, carrier on one axis. Pros: compact, high torque density, load shared by planets. Cons: complex assembly, heat. Load: very high."
+};
+let scene = 'spur', start = 0;
+
+function setScene(s){ scene = s; start = performance.now(); info.innerHTML = notes[s]; }
+
+function gear(x, y, r, n, ang, color, internal){
+  const tooth = r * 0.18, step = Math.PI * 2 / n;
+  ctx.beginPath();
+  for(let i = 0; i < n; i++){
+    const a = ang + i * step;
+    const ro = internal ? r - tooth : r + tooth;
+    const pts = [[r, 0], [ro, 0.2], [ro, 0.5], [r, 0.7]];
+    pts.forEach(([rad, f], k) => {
+      const aa = a + f * step;
+      const px = x + Math.cos(aa) * rad, py = y + Math.sin(aa) * rad;
+      (i === 0 && k === 0) ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    });
+  }
+  ctx.closePath();
+  if(internal){
+    ctx.arc(x, y, r + 22, 0, Math.PI * 2, true);
+    ctx.fillStyle = color; ctx.fill('evenodd');
+  } else {
+    ctx.fillStyle = color; ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, r * 0.2, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff'; ctx.fill();
+  }
+  ctx.strokeStyle = '#333'; ctx.stroke();
+}
+
+function label(t, x, y){ ctx.fillStyle = '#222'; ctx.font = '16px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(t, x, y); }
+const ease = t => 1 - Math.pow(1 - t, 3);
+
+function draw(now){
+  ctx.clearRect(0, 0, 640, 400);
+  const el = (now - start) / 1000;
+  const p = ease(Math.min(el / 2.5, 1));        // assembly progress
+  const spin = Math.max(0, el - 2.5) * 1.2;     // rotation after meshing
+  label(p < 1 ? 'Assembling…' : 'Meshed and running', 320, 30);
+
+  if(scene === 'spur'){
+    const rA = 90, rB = 45, cy = 210;
+    gear(250, cy, rA, 20, spin, '#6fa8dc');
+    gear(250 + (rA + rB) + (1 - p) * 300, cy, rB, 10, -spin * 2 + Math.PI / 10 + Math.PI, '#f6b26b');
+    label('Driver (20T)', 250, 340); label('Driven (10T)', 385, 340);
+  }
+  else if(scene === 'rack'){
+    const

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Milling Process Animation</title>
+<style>
+  body{font-family:Arial,sans-serif;background:#1e2227;color:#eee;text-align:center;margin:10px}
+  canvas{background:#2b3038;border:2px solid #555;border-radius:6px}
+  button{padding:8px 12px;margin:3px;border:0;border-radius:5px;background:#3a7bd5;color:#fff;cursor:pointer}
+  button.on{background:#e67e22}
+  #info{max-width:760px;margin:8px auto;min-height:60px;font-size:15px}
+</style>
+</head>
+<body>
+<h2>Milling Machining Process</h2>
+<div id="modes"></div>
+<div>
+  <button id="dir">Rotation: Clockwise</button>
+  <button id="pause">Pause</button>
+  <button id="restart">Restart</button>
+  Speed <input id="spd" type="range" min="0.5" max="4" step="0.1" value="1.5">
+</div>
+<canvas id="c" width="760" height="400"></canvas>
+<div id="info"></div>
+
+<script>
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+const stock=document.createElement('canvas'); stock.width=760; stock.height=400;
+const sctx=stock.getContext('2d');
+
+const SX=100, SY=120, SW=560, SH=160;       // stock (top view)
+const modes=[
+ {name:"1. Face Milling", r:70, teeth:6, view:"top",
+  path:t=>({x:SX-70+(SW+140)*t, y:SY+SH/2}),
+  info:"FACE MILLING: The cutter axis is perpendicular to the surface. Teeth on the cutter face and periphery remove a thin layer to create a flat, smooth surface. Used for surfacing and squaring stock."},
+ {name:"2. Slab (Peripheral) Milling", r:55, teeth:8, view:"side",
+  path:t=>({x:SX-60+(SW+120)*t, y:SY+SH/2-80+55-14}),
+  info:"SLAB / PERIPHERAL MILLING: The cutter axis is parallel to the surface (side view). Teeth on the cylinder's circumference cut the depth shown. Rotation sets climb vs. conventional milling (toggle the rotation button)."},
+ {name:"3. End Milling – Slot", r:18, teeth:4, view:"top",
+  path:t=>({x:SX+20+(SW-40)*t, y:SY+SH/2}),
+  info:"END MILLING (SLOT): An end mill plunges, then feeds along a straight path and cuts a slot or keyway equal to its diameter. Coolant and chip evacuation are important."},
+ {name:"4. Pocket & Contour Milling", r:14, teeth:4, view:"top",
+  path:t=>pocketPath(t),
+  info:"POCKET + PROFILE MILLING: The end mill spirals out to clear a rectangular pocket, then follows the outline (contour). This is typical CNC toolpath behavior with roughing then finishing passes."}
+];
+function pocketPath(t){
+  const cx=SX+SW/2, cy=SY+SH/2;
+  if(t<0.7){ // rectangular spiral outward
+    const u=t/0.7, a=u*Math.PI*2*5, k=u;
+    const w=30+ (SW/2-90)*k, h=20+(SH/2-30)*k*0.9;
+    const s=Math.cos(a), c=Math.sin(a);
+    const sq=(v)=>Math.sign(v)*Math.pow(Math.abs(v),0.25);
+    return {x:cx+w*sq(s), y:cy+h*sq(c)};
+  }
+  const u=(t-0.7)/0.3, w=SW/2-30, h=SH/2-12, p=u*4;
+  const f=p%1, e=Math.floor(p);
+  const pts=[[-w,-h],[w,-h],[w,h],[-w,h],[-w,-h]];
+  const A=pts[e],B=pts[e+1];
+  return {x:cx+A[0]+(B[0]-A[0])*f, y:cy+A[1]+(B[1]-A[1])*f};
+}
+
+let mode=0, t=0, ang=0, cw=true, paused=false, last=null;
+const mdiv=document.getElementById('modes');
+modes.forEach((m,i)=>{
+  const b=document.createElement('button'); b.textContent=m.name;
+  b.onclick=()=>{mode=i; reset();}; mdiv.appendChild(b);
+});
+function reset(){
+  t=0; ang=0; last=null;
+  sctx.clearRect(0,0,760,400);
+  sctx.fillStyle="#b0b7c3";
+  if(modes[mode].view==="top") sctx.fillRect(SX,SY,SW,SH);
+  else sctx.fillRect(SX,SY+SH/2-80,SW,160); // side view block
+  [...mdiv.children].forEach((b,i)=>b.className=i===mode?'on':'');
+  document.getElementById('info').textContent=modes[mode].info;
+}
+document.getElementById('dir').onclick=function(){cw=!cw; this.textContent="Rotation: "+(cw?"Clockwise":"Counter-clockwise"); reset();};
+document.getElementById('pause').onclick=function(){paused=!paused; this.textContent=paused?"Play":"Pause";};
+document.getElementById('restart').onclick=reset;
+
+function drawCutter(p,m){
+  ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(ang);
+  ctx.fillStyle="#f1c40f"; ctx.strokeStyle="#7d6608"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(0,0,m.r,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle="#c0392b";
+  for(let i=0;i<m.teeth;i++){
+    ctx.save(); ctx.rotate(i*2*Math.PI/m.teeth);
+    ctx.beginPath(); ctx.moveTo(m.r,-4); ctx.lineTo(m.r+8,0); ctx.lineTo(m.r,4); ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle="#555"; ctx.beginPath(); ctx.arc(0,0,Math.min(8,m.r/3),0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+function label(txt,x,y,col){ctx.fillStyle=col||"#fff";ctx.font="14px Arial";ctx.fillText(txt,x,y);}
+
+function frame(ts){
+  const spd=+document.getElementById('spd').value;
+  if(last===null) last=ts;
+  const dt=(ts-last)/1000; last=ts;
+  if(!paused){
+    t+=dt*0.07*spd; ang+=(cw?1:-1)*dt*12*spd;
+    if(t>1){ reset(); }
+  }
+  const m=modes[mode], p=m.path(Math.min(t,1));
+  // remove material
+  sctx.globalCompositeOperation="destination-out";
+  sctx.beginPath(); sctx.arc(p.x,p.y,m.r,0,Math.PI*2); sctx.fill();
+  sctx.globalCompositeOperation="source-over";
+
+  ctx.clearRect(0,0,760,400);
+  // base outline of original stock
+  ctx.strokeStyle="#667"; ctx.setLineDash([5,5]);
+  if(m.view==="top") ctx.strokeRect(SX,SY,SW,SH); else ctx.strokeRect(SX,SY+SH/2-80,SW,160);
+  ctx.setLineDash([]);
+  ctx.drawImage(stock,0,0);
+  drawCutter(p,m);
+
+  // chips
+  ctx.fillStyle="#e0e0e0";
+  if(!paused) for(let i=0;i<4;i++){
+    const a=Math.random()*Math.PI*2, d=m.r+Math.random()*25;
+    ctx.fillRect(p.x+Math.cos(a)*d,p.y+Math.sin(a)*d,3,3);
+  }
+  // annotations
+  label(m.view==="top"?"TOP VIEW":"SIDE VIEW",20,25,"#9fd");
+  label("Cutter rotation: "+(cw?"clockwise ↻":"counter-clockwise ↺"),20,48);
+  label("Feed: "+(m.view==="top"&&mode===3?"toolpath":"→ (cutter travels right)"),20,68);
+  if(m.view==="side"){
+    const climb=!cw; // cutter moving right: CCW = climb
+    label(climb?"CLIMB MILLING (thin-to-thick chip, better finish)":"CONVENTIONAL MILLING (chip starts thin, ends thick)",20,92,climb?"#2ecc71":"#e67e22");
+    label("Workpiece",SX+SW/2-30,SY+SH/2+95,"#bbb");
+  } else label("Workpiece (grey) – removed material shown as empty area",SX,SY+SH+30,"#bbb");
+  label("Progress: "+Math.round(Math.min(t,1)*100)+"%",640,25);
+  requestAnimationFrame(frame);
+}
+reset(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>

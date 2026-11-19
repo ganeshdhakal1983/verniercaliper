@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Lathe: Facing, Step Turning, Chamfering, Knurling</title></head>
+<body style="font-family:Arial;text-align:center;background:#f4f4f4">
+<h3>Lathe Operations on a Ø50 × 100 mm Rod</h3>
+<canvas id="c" width="800" height="400" style="background:#fff;border:1px solid #999"></canvas>
+<p><button onclick="init()">Restart</button></p>
+<script>
+const cv=document.getElementById('c'),g=cv.getContext('2d');
+const S=4, X0=100, CY=200;            // 4 px per mm; bar starts at X0 (left end, inside chuck)
+const topY=rr=>CY-rr*S;
+let r,kn,tx,ty,steps,si,tool,done;
+
+function mv(x,y,sp){
+  const dx=x-tx,dy=y-ty,d=Math.hypot(dx,dy);
+  if(d<=sp){tx=x;ty=y;return true;}
+  tx+=dx/d*sp;ty+=dy/d*sp;return false;
+}
+
+function init(){
+  r=Array(100).fill(25); kn=Array(100).fill(false);
+  tx=X0+100*S+40; ty=topY(25)-30; tool='turn'; si=0; done=false;
+  steps=[];
+  const FX=X0+98*S;                       // after facing, free end is at 98 mm
+  // 1. FACING (remove 2 mm from the free end)
+  steps.push({m:'1. Facing: position tool at the free end',f:()=>mv(FX,topY(25)-5,4)});
+  steps.push({m:'1. Facing: cross-feed tool to centre (removes 2 mm)',f:()=>{
+      const d=mv(FX,CY,0.7);
+      for(let c=98;c<100;c++) r[c]=Math.max(0,Math.min(r[c],(CY-ty)/S));
+      return d;}});
+  steps.push({m:'1. Facing done: retract tool',f:()=>mv(FX+20,topY(25)-30,4)});
+  // 2. STEP TURNING
+  [[45,38],[35,58],[25,78]].forEach(([d,st],i)=>{
+    steps.push({m:'2. Turning pass '+(i+1)+': position tool',f:()=>mv(FX+20,topY(25)-30,5)});
+    steps.push({m:'2. Turning pass '+(i+1)+': set depth for Ø'+d,f:()=>mv(FX+20,topY(d/2),1.5)});
+    steps.push({m:'2. Turning pass '+(i+1)+': feed toward chuck, Ø'+d+' for '+(98-st)+' mm',f:()=>{
+      const dn=mv(X0+st*S,topY(d/2),1.2);
+      for(let c=st;c<98;c++) if(X0+c*S>=tx) r[c]=Math.min(r[c],d/2);
+      return dn;}});
+    steps.push({m:'2. Pass '+(i+1)+' complete: retract tool',f:()=>mv(tx,topY(25)-30,3)});
+  });
+  // 3. CHAMFERING (2 x 45 deg at free end of the last step)
+  steps.push({m:'3. Chamfering: position tool at end of Ø25 step',f:()=>mv(X0+96*S,topY(12.5)-30,5)});
+  steps.push({m:'3. Chamfering: touch surface',f:()=>mv(X0+96*S,topY(12.5),1.5)});
+  steps.push({m:'3. Chamfering: feed at 45° (2 × 45°)',f:()=>{
+      const dn=mv(X0+98*S,topY(10.5),0.5);
+      const tc=(tx-X0)/S;
+      for(let c=96;c<98;c++) if(c+0.5<=tc) r[c]=Math.min(r[c],12.5-(c+0.5-96));
+      return dn;}});
+  steps.push({m:'3. Chamfer done: retract tool',f:()=>mv(X0+98*S+20,topY(25)-30,4)});
+  // 4. KNURLING (roller tool on the Ø25 step)
+  steps.push({m:'4. Knurling: bring roller above the Ø25 step',tool:'roll',f:()=>mv(X0+96*S,topY(12.5)-30,5)});
+  steps.push({m:'4. Knurling: press roller into the work',tool:'roll',f:()=>mv(X0+96*S,topY(12.5)+2,0.5)});
+  steps.push({m:'4. Knurling: traverse along the step (diamond pattern forms)',tool:'roll',f:()=>{
+      const dn=mv(X0+78*S,ty,0.8);
+      for(let c=78;c<96;c++) if(X0+c*S>=tx) kn[c]=true;
+      return dn;}});
+  steps.push({m:'4. Knurling done: retract roller',tool:'roll',f:()=>mv(tx,topY(25)-30,3)});
+  steps.push({m:'Finished: faced, stepped Ø45/Ø35/Ø25 (20 mm each), chamfered and knurled',tool:'roll',f:()=>{done=true;return true;}});
+}
+init();
+
+function update(){
+  if(done) return;
+  const s=steps[si]; tool=s.tool||'turn';
+  if(s.f()) si++;
+}
+
+function drawTool(){
+  if(tool==='turn'){
+    g.fillStyle='#d35400';g.beginPath();
+    g.moveTo(tx,ty);g.lineTo(tx+30,ty-12);g.lineTo(tx+30,ty-70);
+    g.lineTo(tx+90,ty-70);g.lineTo(tx+90,ty-12);g.lineTo(tx+50,ty-12);g.closePath();g.fill();
+  } else {
+    g.fillStyle='#d35400';g.fillRect(tx-10,ty-60,20,30);g.fillRect(tx-25,ty-32,50,6);
+    g.fillStyle='#777';g.strokeStyle='#222';g.beginPath();g.arc(tx,ty-14,14,0,7);g.fill();g.stroke();
+    g.fillStyle='#222';g.beginPath();g.arc(tx,ty-14,3,0,7);g.fill();
+  }
+}
+
+function draw(){
+  g.clearRect(0,0,800,400);
+  g.setLineDash([12,4,2,4]);g.strokeStyle='#c00';g.beginPath();
+  g.moveTo(40,CY);g.lineTo(640,CY);g.stroke();g.setLineDash([]);
+  // workpiece
+  g.fillStyle='#b0b7c3';
+  for(let c=0;c<100;c++){const h=r[c]*S;if(h>0)g.fillRect(X0+c*S,CY-h,S+0.6,2*h);}
+  g.strokeStyle='#222';
+  [-1,1].forEach(sg=>{g.beginPath();
+    for(let c=0;c<100;c++){ if(r[c]<=0)break;
+      const y=CY+sg*r[c]*S; if(c===0)g.moveTo(X0,y);else g.lineTo(X0+c*S,y);
+      g.lineTo(X0+(c+1)*S,y);}
+    g.stroke();});
+  // knurl pattern
+  let k0=kn.indexOf(true);
+  if(k0>=0){
+    g.save();g.beginPath();g.rect(X0+k0*S,CY-12.5*S,(96-k0)*S,25*S);g.clip();
+    g.strokeStyle='#333';g.lineWidth=0.8;g.beginPath();
+    for(let x=X0+k0*S-60;x<X0+96*S+60;x+=6){
+      g.moveTo(x,CY-60);g.lineTo(x+120,CY+60);
+      g.moveTo(x,CY+60);g.lineTo(x+120,CY-60);}
+    g.stroke();g.restore();
+  }
+  // chuck (grips first 20 mm of the rod)
+  g.fillStyle='#555';g.fillRect(60,CY-75,X0+20*S-60,150);
+  g.fillStyle='#fff';g.font='13px Arial';g.fillText('Chuck',72,CY-85+15);
+  g.fillStyle='#888';g.fillRect(20,CY-30,40,60);
+  drawTool();
+  // dimensions
+  g.fillStyle='#000';g.font='13px Arial';g.strokeStyle='#06c';
+  [[20,'Ø50 (uncut)'],[38,'Ø45 × 20'],[58,'Ø35 × 20'],[78,'Ø25 × 20']].forEach(([c,t],i,a)=>{
+    g.beginPath();g.moveTo(X0+c*S,CY+85);g.lineTo(X0+c*S,CY+125);g.stroke();
+    g.fillText(t,X0+c*S+4,CY+110);});
+  g.beginPath();g.moveTo(X0+98*S,CY+85);g.lineTo(X0+98*S,CY+125);g.stroke();
+  g.fillText('Bar: Ø50 × 100 mm (20 mm in chuck, 2 mm faced off)',X0,CY+150);
+  g.font='bold 16px Arial';g.fillText(steps[Math.min(si,steps.length-1)].m,30,35);
+}
+function loop(){for(let i=0;i<2;i++)update();draw();requestAnimationFrame(loop);}
+loop();
+</script>
+</body>
+</html>

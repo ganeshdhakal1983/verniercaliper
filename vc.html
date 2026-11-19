@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Vernier & Micrometer Reading Animation</title>
+<style>
+  body{font-family:Arial,sans-serif;max-width:900px;margin:20px auto;padding:0 10px}
+  button{padding:8px 14px;margin:4px;font-size:15px;cursor:pointer}
+  .active{background:#2563eb;color:#fff}
+  svg{width:100%;background:#f8fafc;border:1px solid #ccc;border-radius:8px}
+  #steps{background:#fff7e6;border-left:5px solid #f59e0b;padding:10px;font-size:18px;line-height:1.6}
+  input[type=range]{width:100%}
+</style>
+</head>
+<body>
+<h2>Reading a Vernier Caliper and a Micrometer</h2>
+<button id="tabV" class="active" onclick="setMode('v')">Vernier Caliper</button>
+<button id="tabM" onclick="setMode('m')">Micrometer Screw Gauge</button>
+<svg id="svg" viewBox="0 0 900 260"></svg>
+<input type="range" id="slider" oninput="stopAnim();update(+this.value)">
+<button onclick="animate()">▶ Animate</button>
+<button onclick="stopAnim()">⏸ Stop</button>
+<button onclick="randomVal()">🎲 Random reading</button>
+<div id="steps"></div>
+
+<script>
+let mode='v', val=23.4, timer=null;
+const svg=document.getElementById('svg'), sl=document.getElementById('slider');
+const NS='http://www.w3.org/2000/svg';
+let out='';
+function el(t,a,txt){out+=`<${t} ${Object.entries(a).map(([k,v])=>k+'="'+v+'"').join(' ')}>${txt||''}</${t}>`}
+const line=(x1,y1,x2,y2,c='#000',w=1)=>el('line',{x1,y1,x2,y2,stroke:c,'stroke-width':w});
+const text=(x,y,s,sz=12,c='#000',anchor='middle')=>el('text',{x,y,'font-size':sz,fill:c,'text-anchor':anchor},s);
+
+function setMode(m){
+  mode=m; stopAnim();
+  document.getElementById('tabV').className=m=='v'?'active':'';
+  document.getElementById('tabM').className=m=='m'?'active':'';
+  if(m=='v'){sl.min=0;sl.max=40;sl.step=0.1;val=23.4}
+  else{sl.min=0;sl.max=25;sl.step=0.01;val=7.83}
+  sl.value=val; update(val);
+}
+
+function drawVernier(v){
+  v=Math.round(v*10)/10;
+  const S=20, x0=40;                 // 20 px per mm
+  const main=Math.floor(v+1e-9), n=Math.round((v-main)*10);
+  out='';
+  el('rect',{x:20,y:60,width:860,height:70,fill:'#dbeafe',stroke:'#1e3a8a'});
+  for(let i=0;i<=40;i++){
+    const x=x0+i*S, h=i%10==0?30:(i%5==0?22:15);
+    line(x,130,x,130-h,'#000',1);
+    if(i%10==0) text(x,95,i/10,14);   // cm labels
+  }
+  text(450,50,'Main scale (1 division = 1 mm, numbers in cm)',14,'#1e3a8a');
+  const off=x0+v*S;                  // vernier slides
+  el('rect',{x:off-10,y:130,width:10*0.9*S+30,height:70,fill:'#fde68a',stroke:'#92400e','fill-opacity':.9});
+  for(let i=0;i<=10;i++){
+    const x=off+i*0.9*S;
+    line(x,130,x,130+(i==n?42:25),i==n?'#dc2626':'#000',i==n?3:1);
+    text(x,190,i,12,i==n?'#dc2626':'#000');
+  }
+  // zero marker on main scale
+  line(off,60,off,130,'#16a34a',2);
+  text(off,250,'Vernier scale (10 div = 9 mm, LC = 0.1 mm)',14,'#92400e');
+  svg.innerHTML=out;
+  const mm=main+n/10;
+  steps([
+   `<b>Step 1 – Main scale:</b> the vernier zero is just past <b>${main} mm</b> → <span style="color:#16a34a">${main} mm</span>`,
+   `<b>Step 2 – Vernier:</b> line number <b style="color:#dc2626">${n}</b> lines up with a main-scale line`,
+   `<b>Step 3 – Multiply:</b> ${n} × 0.1 mm = ${(n/10).toFixed(1)} mm`,
+   `<b>Reading = ${main} + ${(n/10).toFixed(1)} = ${mm.toFixed(1)} mm</b>`]);
+}
+
+function drawMicrometer(v){
+  v=Math.round(v*100)/100;
+  const S=16, x0=60, dy=100;
+  const sleeve=Math.floor(v*2+1e-9)/2, t=Math.round((v-sleeve)*100);
+  out='';
+  el('rect',{x:x0,y:dy-35,width:25*S+20,height:70,fill:'#e5e7eb',stroke:'#374151'});
+  for(let i=0;i<=25;i++){
+    line(x0+i*S,dy,x0+i*S,dy-22,'#000',1.5);
+    if(i%5==0) text(x0+i*S,dy-27,i,13);
+    if(i<25) line(x0+i*S+S/2,dy,x0+i*S+S/2,dy+15,'#000',1);
+  }
+  line(x0,dy,x0+25*S+20,dy,'#000',2);
+  const ex=x0+v*S;                      // thimble edge
+  el('rect',{x:ex,y:dy-60,width:340,height:120,fill:'#fde68a','fill-opacity':.92,stroke:'#92400e'});
+  line(ex,dy-60,ex,dy+60,'#16a34a',3);
+  for(let k=-5;k<=5;k++){
+    const y=dy+k*10, d=((t+k)%50+50)%50;
+    line(ex,y,ex+(d%5==0?25:15),y,'#000',1);
+    if(d%5==0) text(ex+40,y+4,d,12);
+  }
+  line(ex,dy,ex+60,dy,'#dc2626',3);     // datum line
+  text(ex+110,dy+4,'← datum line',13,'#dc2626','start');
+  text(450,235,'Sleeve: 0.5 mm per mark • Thimble: 50 divisions • LC = 0.01 mm',14,'#92400e');
+  svg.innerHTML=out;
+  steps([
+   `<b>Step 1 – Sleeve (mm and half-mm):</b> last visible mark before the thimble edge = <span style="color:#16a34a">${sleeve.toFixed(1)} mm</span>`,
+   `<b>Step 2 – Thimble:</b> the line on the datum line is <b style="color:#dc2626">${t}</b>`,
+   `<b>Step 3 – Multiply:</b> ${t} × 0.01 mm = ${(t/100).toFixed(2)} mm`,
+   `<b>Reading = ${sleeve.toFixed(1)} + ${(t/100).toFixed(2)} = ${v.toFixed(2)} mm</b>`]);
+}
+
+function steps(a){document.getElementById('steps').innerHTML=a.join('<br>')}
+function update(v){val=v; mode=='v'?drawVernier(v):drawMicrometer(v)}
+function animate(){
+  stopAnim(); let v=+sl.min, max=+sl.max, step=mode=='v'?0.1:0.05;
+  timer=setInterval(()=>{ v+=step; if(v>max){stopAnim();return}
+    sl.value=v; update(v)}, mode=='v'?40:25);
+}
+function stopAnim(){clearInterval(timer)}
+function randomVal(){
+  stopAnim();
+  const v=mode=='v'? Math.round(Math.random()*400)/10 : Math.round(Math.random()*2500)/100;
+  sl.value=v; update(v);
+}
+setMode('v');
+</script>
+</body>
+</html>

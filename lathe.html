@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Step Turning Animation</title></head>
+<body style="font-family:Arial;text-align:center;background:#f4f4f4">
+<h3>Step Turning on a Lathe: Ø50 → Ø45, Ø35, Ø25 (20 mm each)</h3>
+<canvas id="c" width="900" height="380" style="background:#fff;border:1px solid #999"></canvas>
+<p><button onclick="restart()">Restart</button></p>
+<script>
+const cv=document.getElementById('c'),g=cv.getContext('2d');
+const S=4, X0=160, CY=210, L=80;          // 4 px per mm, 80 mm bar
+const passes=[{d:45,end:20},{d:35,end:40},{d:25,end:60}]; // end = mm from chuck
+let r, p, phase, tx, ty, msg;
+function restart(){
+  r=Array(L).fill(25); p=0; phase='infeed';
+  tx=X0+L*S+30; ty=CY-25*S-60; msg='Start: Ø50 bar held in chuck';
+}
+restart();
+function step(){
+  const P=passes[p]; if(!P){msg='Finished: Ø45, Ø35, Ø25, each 20 mm long';return;}
+  const targetY=CY-(P.d/2)*S, endX=X0+P.end*S, speed=1.2;
+  if(phase==='infeed'){
+    msg='Pass '+(p+1)+': set depth of cut to Ø'+P.d;
+    if(ty<targetY-0.0) ty+=1; if(ty>=targetY){ty=targetY;phase='cut';}
+  } else if(phase==='cut'){
+    msg='Pass '+(p+1)+': tool feeds toward chuck, turning Ø'+P.d+' for '+(P.end===20?60:P.end===40?40:20)+' mm';
+    tx-=speed;
+    for(let c=0;c<L;c++){const x=X0+c*S;
+      if(x>=tx && c>=P.end) r[c]=Math.min(r[c],P.d/2);}
+    if(tx<=endX){phase='retract';}
+  } else if(phase==='retract'){
+    msg='Pass '+(p+1)+' done: retract tool';
+    ty-=2; if(ty<CY-25*S-60){phase='return';}
+  } else if(phase==='return'){
+    msg='Return tool to tailstock end';
+    tx+=4; if(tx>=X0+L*S+30){p++;phase='infeed';}
+  }
+}
+function draw(){
+  g.clearRect(0,0,900,380);
+  // centre line
+  g.setLineDash([12,4,2,4]);g.strokeStyle='#c00';g.beginPath();g.moveTo(60,CY);g.lineTo(560,CY);g.stroke();g.setLineDash([]);
+  // chuck
+  g.fillStyle='#555';g.fillRect(90,CY-70,70,140);
+  g.fillStyle='#888';g.fillRect(40,CY-30,50,60);
+  // workpiece
+  g.fillStyle='#b0b7c3';g.strokeStyle='#222';
+  for(let c=0;c<L;c++){const h=r[c]*S;g.fillRect(X0+c*S,CY-h,S+0.5,2*h);}
+  g.beginPath();g.moveTo(X0,CY-r[0]*S);
+  for(let c=0;c<L;c++){g.lineTo(X0+c*S,CY-r[c]*S);g.lineTo(X0+(c+1)*S,CY-r[c]*S);}
+  g.stroke();
+  g.beginPath();g.moveTo(X0,CY+r[0]*S);
+  for(let c=0;c<L;c++){g.lineTo(X0+c*S,CY+r[c]*S);g.lineTo(X0+(c+1)*S,CY+r[c]*S);}
+  g.stroke();
+  // tool (above work, tip touching surface)
+  g.fillStyle='#d35400';g.beginPath();
+  g.moveTo(tx,ty);g.lineTo(tx+30,ty-12);g.lineTo(tx+30,ty-70);g.lineTo(tx+90,ty-70);g.lineTo(tx+90,ty-12);g.lineTo(tx+50,ty-12);g.closePath();g.fill();
+  // dimension labels
+  g.fillStyle='#000';g.font='13px Arial';
+  const labels=[['Ø50',0],['Ø45',20],['Ø35',40],['Ø25',60]];
+  labels.forEach(([t,mm])=>{g.fillText(t+' × 20',X0+mm*S+8,CY+110);
+    g.strokeStyle='#06c';g.beginPath();g.moveTo(X0+mm*S,CY+85);g.lineTo(X0+mm*S,CY+120);g.stroke();});
+  g.beginPath();g.moveTo(X0+L*S,CY+85);g.lineTo(X0+L*S,CY+120);g.stroke();
+  g.font='bold 16px Arial';g.fillText(msg,40,40);
+  g.font='13px Arial';g.fillText('Chuck',95,CY-80);g.fillText('Tool',tx+40,ty-80);
+}
+function loop(){for(let i=0;i<2;i++)step();draw();requestAnimationFrame(loop);}
+loop();
+</script>
+</body>
+</html>
